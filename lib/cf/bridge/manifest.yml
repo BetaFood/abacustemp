@@ -10,7 +10,7 @@ applications:
     DEBUG: e-abacus-*
     COLLECTOR: abacus-usage-collector
     COUCHDB: abacus-dbserver
-    EUREKA: abacus-eureka-stub
+    EUREKA: abacus-eureka-plugin
     UAA: uaa
     API: api
     NODE_MODULES_CACHE: false

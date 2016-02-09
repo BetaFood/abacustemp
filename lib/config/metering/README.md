@@ -1,5 +1,5 @@
 abacus-metering-config
 ===
 
-Resource usage metering configuration.
+Provides access to metering plans.
 

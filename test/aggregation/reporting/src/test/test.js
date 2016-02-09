@@ -250,10 +250,11 @@ describe('abacus-usage-reporting-itest', () => {
     };
 
     // Start local database server
-    start('abacus-dbserver');
+    if (!process.env.COUCHDB)
+      start('abacus-dbserver');
 
-    // Start account stub
-    start('abacus-account-stub');
+    // Start account plugin
+    start('abacus-account-plugin');
 
     // Start usage reporting service
     start('abacus-usage-reporting');
@@ -268,11 +269,12 @@ describe('abacus-usage-reporting-itest', () => {
     // Stop usage reporting service
     stop('abacus-usage-reporting');
 
-    // Stop account stub
-    stop('abacus-account-stub');
+    // Stop account plugin
+    stop('abacus-account-plugin');
 
     // Stop local database server
-    stop('abacus-dbserver');
+    if (!process.env.COUCHDB)
+      stop('abacus-dbserver');
   });
 
   it('report rated usage submissions', function(done) {
@@ -306,23 +308,23 @@ describe('abacus-usage-reporting-itest', () => {
     //    1           1            1    0        1-0
 
     // Organization id based on org index
-    const oid = (o) => ['a3d7fe4d-3cb1-4cc3-a831-ffe98e20cf27',
+    const oid = (o) => ['a3d7fe4d-3cb1-4cc3-a831-ffe98e20cf28',
       o + 1].join('-');
 
     // One of the two spaces at a given org based on resource instance index
-    const sid = (o, ri) => ['aaeae239-f3f8-483c-9dd0-de5d41c38b6a',
+    const sid = (o, ri) => ['aaeae239-f3f8-483c-9dd0-de5d41c38b6b',
       o + 1, ri % 2 === 0 ? 1 : 2].join('-');
 
     // One of the two consumers at a given org and derived space based on
     // resource instance index
-    const cid = (o, ri) => ['bbeae239-f3f8-483c-9dd0-de6781c38bab',
+    const cid = (o, ri) => ['bbeae239-f3f8-483c-9dd0-de6781c38bac',
       o + 1, ri % 2 === 0 ? 1 : 2, ri % 8 < 4 ? 1 : 2].join('-');
 
     // One of the two plans based on resource instance index
     const pid = (ri) => ri % 4 < 2 ? 'basic' : 'standard';
     
     // The metering plan id
-    const mid = (ri) => 'basic-test-metering-plan';
+    const mpid = (ri) => 'basic-test-metering-plan';
 
     // One of the two rating plans based on resource instance index
     const ppid = (ri) => ri % 4 < 2 ? 'test-pricing-basic' :
@@ -384,7 +386,7 @@ describe('abacus-usage-reporting-itest', () => {
       // Create plan aggregations
       return create(plans, (i) => {
         const planId = pid(i === 0 ? 0 : 2);
-        const meteringPlanId = mid(i === 0 ? 0 : 2);
+        const meteringPlanId = mpid(i === 0 ? 0 : 2);
         const ratingPlanId = rpid(i === 0 ? 0 : 2);
         const pricingPlanId = ppid(i === 0 ? 0 : 2);
         return {
@@ -460,7 +462,7 @@ describe('abacus-usage-reporting-itest', () => {
       // Create plan level aggregations
       return create(plans, (i) => {
         const planId = pid(i === 0 ? 0 : 2);
-        const meteringPlanId = mid(i === 0 ? 0 : 2);
+        const meteringPlanId = mpid(i === 0 ? 0 : 2);
         const ratingPlanId = rpid(i === 0 ? 0 : 2);
         const pricingPlanId = ppid(i === 0 ? 0 : 2);
         return {
@@ -518,7 +520,7 @@ describe('abacus-usage-reporting-itest', () => {
       // Create plan aggregations
       return create(plans, (i) => {
         const planId = pid(i === 0 ? 0 : 2);
-        const meteringPlanId = mid(i === 0 ? 0 : 2);
+        const meteringPlanId = mpid(i === 0 ? 0 : 2);
         const ratingPlanId = rpid(i === 0 ? 0 : 2);
         const pricingPlanId = ppid(i === 0 ? 0 : 2);
         return {
@@ -613,7 +615,7 @@ describe('abacus-usage-reporting-itest', () => {
         expect(val).to.not.equal(undefined);
 
         debug('Verified rated usage for org%d', o + 1);
-        dbbulk(ratedConsumerTemplate(o, ri, u), (err, val) => {
+        dbbulk(ratedConsumerTemplate(o, ri, u), {}, (err, val) => {
           debug('Verify rated consumer usage for org%d', o + 1);
 
           expect(err).to.equal(null);
@@ -670,8 +672,10 @@ describe('abacus-usage-reporting-itest', () => {
     };
 
     // Wait for usage reporting service to start
+    const procStartTimeout = process.env.CI_TIMEOUT ?
+      parseInt(process.env.CI_TIMEOUT) : 10000;
     request.waitFor('http://localhost::p/batch',
-      { p: 9088 }, (err, value) => {
+      { p: 9088 }, procStartTimeout, (err, value) => {
         // Failed to ping usage reporting service before timing out
         if (err) throw err;
 

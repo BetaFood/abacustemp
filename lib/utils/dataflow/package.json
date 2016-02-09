@@ -2,7 +2,7 @@
   "name": "abacus-dataflow",
   "description": "Simple and configurable map and reduce dataflow transforms",
   "license": "Apache-2.0",
-  "version": "0.0.4",
+  "version": "0.0.5-rc.0",
   "private": true,
   "homepage": "https://github.com/cloudfoundry-incubator/cf-abacus/lib/utils/dataflow",
   "bugs": {
@@ -39,7 +39,7 @@
     "abacus-dedupe": "file:../dedupe",
     "abacus-eureka": "file:../eureka",
     "abacus-lock": "file:../lock",
-    "abacus-lrudown": "file:../lrudown",
+    "abacus-lrucache": "file:../lrucache",
     "abacus-partition": "file:../partition",
     "abacus-request": "file:../request",
     "abacus-retry": "file:../retry",

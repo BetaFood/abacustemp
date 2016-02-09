@@ -75,7 +75,7 @@ const pruneWindows = (v, k) => {
   if(k === 'consumers')
     return map(v, (c) => c.split('/')[0]);
   return v;
-}
+};
 
 // Converts a millisecond number to a format a number that is YYYYMMDDHHmmSS
 const dateUTCNumbify = (t) => {
@@ -162,10 +162,11 @@ describe('abacus-usage-aggregator-itest', () => {
     };
 
     // Start local database server
-    start('abacus-dbserver');
+    if (!process.env.COUCHDB)
+      start('abacus-dbserver');
 
-    // Start account stub
-    start('abacus-account-stub');
+    // Start account plugin
+    start('abacus-account-plugin');
 
     // Start usage aggregator
     start('abacus-usage-aggregator');
@@ -180,11 +181,12 @@ describe('abacus-usage-aggregator-itest', () => {
     // Stop usage aggregator
     stop('abacus-usage-aggregator');
 
-    // Stop account stub
-    stop('abacus-account-stub');
+    // Stop account plugin
+    stop('abacus-account-plugin');
 
     // Stop local database server
-    stop('abacus-dbserver');
+    if (!process.env.COUCHDB)
+      stop('abacus-dbserver');
   });
 
   it('aggregator accumulated usage submissions', function(done) {
@@ -272,16 +274,18 @@ describe('abacus-usage-aggregator-itest', () => {
       metering_plan_id: mpid(ri),
       rating_plan_id: rpid(ri),
       pricing_plan_id: ppid(ri),
-      pricing_metrics: [
-        { name: 'storage',
-          price: pid(ri) === 'basic' ? 1 : 0.5 },
-        { name: 'thousand_light_api_calls',
-          price: pid(ri) === 'basic' ? 0.03 : 0.04 },
-        { name: 'heavy_api_calls',
-          price: pid(ri) === 'basic' ? 0.15 : 0.18 },
-        { name: 'memory',
-          price: pid(ri) === 'basic' ? 0.00014 : 0.00028 }
-      ],
+      prices: {
+        metrics: [
+          { name: 'storage',
+            price: pid(ri) === 'basic' ? 1 : 0.5 },
+          { name: 'thousand_light_api_calls',
+            price: pid(ri) === 'basic' ? 0.03 : 0.04 },
+          { name: 'heavy_api_calls',
+            price: pid(ri) === 'basic' ? 0.15 : 0.18 },
+          { name: 'memory',
+            price: pid(ri) === 'basic' ? 0.00014 : 0.00028 }
+        ]
+      },
       accumulated_usage: [
         {
           metric: 'storage',
@@ -355,7 +359,7 @@ describe('abacus-usage-aggregator-itest', () => {
       return create(plans, (i) => ({
         plan_id: [pid(i === 0 ? 0 : 2), mpid(i === 0 ? 0 : 2),
           rpid(i === 0 ? 0 : 2), ppid(i === 0 ? 0 : 2)].join('/'),
-        metering_plan_id: mid(i === 0 ? 0 : 2),
+        metering_plan_id: mpid(i === 0 ? 0 : 2),
         rating_plan_id: rpid(i === 0 ? 0 : 2),
         pricing_plan_id: ppid(i === 0 ? 0 : 2),
         aggregated_usage: a(ri, u, i, count, true)
@@ -414,7 +418,7 @@ describe('abacus-usage-aggregator-itest', () => {
       return create(plans, (i) => ({
         plan_id: [pid(i === 0 ? 0 : 2), mpid(i === 0 ? 0 : 2),
           rpid(i === 0 ? 0 : 2), ppid(i === 0 ? 0 : 2)].join('/'),
-        metering_plan_id: mid(i === 0 ? 0 : 2),
+        metering_plan_id: mpid(i === 0 ? 0 : 2),
         rating_plan_id: rpid(i === 0 ? 0 : 2),
         pricing_plan_id: ppid(i === 0 ? 0 : 2),
         aggregated_usage: a(ri, u, i, count, true)
@@ -466,7 +470,7 @@ describe('abacus-usage-aggregator-itest', () => {
       return create(plans, (i) => ({
         plan_id: [pid(i === 0 ? 0 : 2), mpid(i === 0 ? 0 : 2),
           rpid(i === 0 ? 0 : 2), ppid(i === 0 ? 0 : 2)].join('/'),
-        metering_plan_id: mid(i === 0 ? 0 : 2),
+        metering_plan_id: mpid(i === 0 ? 0 : 2),
         rating_plan_id: rpid(i === 0 ? 0 : 2),
         pricing_plan_id: ppid(i === 0 ? 0 : 2),
         aggregated_usage: a(ri, u, i, count, true)
@@ -631,8 +635,10 @@ describe('abacus-usage-aggregator-itest', () => {
     };
 
     // Wait for usage aggregator to start
+    const procStartTimeout = process.env.CI_TIMEOUT ?
+      parseInt(process.env.CI_TIMEOUT) : 10000;
     request.waitFor('http://localhost::p/batch',
-      { p: 9300 }, (err, value) => {
+      { p: 9300 }, procStartTimeout, (err, value) => {
         // Failed to ping usage aggregator before timing out
         if (err) throw err;
 

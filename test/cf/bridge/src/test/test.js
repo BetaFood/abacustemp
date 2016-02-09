@@ -115,10 +115,11 @@ describe('abacus-cf-bridge-itest', () => {
     app.use(router.batch(routes));
     server = app.listen(4321);
 
-    start('abacus-dbserver');
-    start('abacus-authserver-stub');
-    start('abacus-provisioning-stub');
-    start('abacus-account-stub');
+    if (!process.env.COUCHDB)
+      start('abacus-dbserver');
+    start('abacus-authserver-plugin');
+    start('abacus-provisioning-plugin');
+    start('abacus-account-plugin');
     start('abacus-usage-collector');
     start('abacus-usage-meter');
     start('abacus-usage-accumulator');
@@ -139,10 +140,11 @@ describe('abacus-cf-bridge-itest', () => {
     stop('abacus-usage-accumulator');
     stop('abacus-usage-meter');
     stop('abacus-usage-collector');
-    stop('abacus-account-stub');
-    stop('abacus-provisioning-stub');
-    stop('abacus-authserver-stub');
-    stop('abacus-dbserver');
+    stop('abacus-account-plugin');
+    stop('abacus-provisioning-plugin');
+    stop('abacus-authserver-plugin');
+    if (!process.env.COUCHDB)
+      stop('abacus-dbserver');
 
     server.close();
   });
@@ -224,9 +226,10 @@ describe('abacus-cf-bridge-itest', () => {
   it('submit runtime usage to usage collector', (done) => {
 
     // Wait for bridge to start
-    request.waitFor(
-      'http://localhost::p/v1/cf/bridge', { p: 9500 },
-      (err, uri, opts) => {
+    const procStartTimeout = process.env.CI_TIMEOUT ?
+      parseInt(process.env.CI_TIMEOUT) : 10000;
+    request.waitFor('http://localhost::p/v1/cf/bridge',
+      { p: 9500 }, procStartTimeout, (err, uri, opts) => {
         // Failed to ping bridge before timing out
         if (err) throw err;
 

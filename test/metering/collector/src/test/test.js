@@ -66,13 +66,14 @@ describe('abacus-usage-collector-itest', () => {
     };
 
     // Start local database server
-    start('abacus-dbserver');
+    if (!process.env.COUCHDB)
+      start('abacus-dbserver');
 
-    // Start provisioning service
-    start('abacus-provisioning-stub');
+    // Start provisioning plugin
+    start('abacus-provisioning-plugin');
 
-    // Start account service
-    start('abacus-account-stub');
+    // Start account plugin
+    start('abacus-account-plugin');
 
     // Start usage collector
     start('abacus-usage-collector');
@@ -87,14 +88,15 @@ describe('abacus-usage-collector-itest', () => {
     // Stop usage collector
     stop('abacus-usage-collector');
 
-    // Stop provisioning service
-    stop('abacus-provisioning-stub');
+    // Stop provisioning plugin
+    stop('abacus-provisioning-plugin');
 
-    // Stop account service
-    stop('abacus-account-stub');
+    // Stop account plugin
+    stop('abacus-account-plugin');
 
     // Stop local database server
-    stop('abacus-dbserver');
+    if (!process.env.COUCHDB)
+      stop('abacus-dbserver');
   });
 
   it('collect measured usage submissions', function(done) {
@@ -242,8 +244,10 @@ describe('abacus-usage-collector-itest', () => {
     };
 
     // Wait for usage collector to start
+    const procStartTimeout = process.env.CI_TIMEOUT ?
+      parseInt(process.env.CI_TIMEOUT) : 10000;
     request.waitFor('http://localhost::p/batch',
-      { p: 9080 }, (err, value) => {
+      { p: 9080 }, procStartTimeout, (err, value) => {
         // Failed to ping usage collector before timing out
         if (err) throw err;
 

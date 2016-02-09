@@ -137,10 +137,11 @@ describe('abacus-usage-accumulator-itest', () => {
     };
 
     // Start local database server
-    start('abacus-dbserver');
+    if (!process.env.COUCHDB)
+      start('abacus-dbserver');
 
-    // Start account stub
-    start('abacus-account-stub');
+    // Start account plugin
+    start('abacus-account-plugin');
 
     // Start usage accumulator
     start('abacus-usage-accumulator');
@@ -155,11 +156,12 @@ describe('abacus-usage-accumulator-itest', () => {
     // Stop usage accumulator
     stop('abacus-usage-accumulator');
 
-    // Stop account stub
-    stop('abacus-account-stub');
+    // Stop account plugin
+    stop('abacus-account-plugin');
 
     // Stop local database server
-    stop('abacus-dbserver');
+    if (!process.env.COUCHDB)
+      stop('abacus-dbserver');
   });
 
   it('accumulate metered usage submissions', function(done) {
@@ -222,16 +224,18 @@ describe('abacus-usage-accumulator-itest', () => {
       metering_plan_id: mpid(),
       rating_plan_id: rpid(),
       pricing_plan_id: ppid(),
-      pricing_metrics: [
-        { name: 'storage',
-          price: pid() === 'basic' ? 1 : 0.5 },
-        { name: 'thousand_light_api_calls',
-          price: pid() === 'basic' ? 0.03 : 0.04 },
-        { name: 'heavy_api_calls',
-          price: pid() === 'basic' ? 0.15 : 0.18 },
-        { name: 'memory',
-          price: pid() === 'basic' ? 0.00014 : 0.00028 }
-      ],
+      prices: {
+        metrics: [
+          { name: 'storage',
+            price: pid() === 'basic' ? 1 : 0.5 },
+          { name: 'thousand_light_api_calls',
+            price: pid() === 'basic' ? 0.03 : 0.04 },
+          { name: 'heavy_api_calls',
+            price: pid() === 'basic' ? 0.15 : 0.18 },
+          { name: 'memory',
+            price: pid() === 'basic' ? 0.00014 : 0.00028 }
+        ]
+      },
       metered_usage: [
         { metric: 'storage', quantity: 1 },
         { metric: 'thousand_light_api_calls', quantity: 1 },
@@ -351,8 +355,10 @@ describe('abacus-usage-accumulator-itest', () => {
     };
 
     // Wait for usage accumulator to start
+    const procStartTimeout = process.env.CI_TIMEOUT ?
+      parseInt(process.env.CI_TIMEOUT) : 10000;
     request.waitFor('http://localhost::p/batch',
-      { p: 9200 }, (err, value) => {
+      { p: 9200 }, procStartTimeout, (err, value) => {
         // Failed to ping usage accumulator before timing out
         if (err) throw err;
 
