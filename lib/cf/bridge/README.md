@@ -18,10 +18,10 @@ The bridge communicates with Cloud Controller. Register cf-bridge application as
 gem install cf-uaac
 uaac target uaa.bosh-lite.com --skip-ssl-validation
 uaac token client get admin -s admin-secret
-uaac client add bridge --authorized_grant_types client_credentials --authorities cloud_controller.admin --secret secret
+uaac client add bridge --name cf-bridge --authorized_grant_types client_credentials --authorities cloud_controller.admin --secret secret
 ```
 
-**Note:** *Currently the client ID and secret are hardcoded*
+Take care to set change the client ID and secret in the example above.
 
 ## Start the bridge
 
@@ -32,6 +32,13 @@ To start the bridge locally against CF running on BOSH Lite set the API and UAA 
 ```
 export API=https://api.bosh-lite.com
 export UAA=https://uaa.bosh-lite.com
+```
+
+Set the used client ID and secret with:
+
+```
+export CLIENT_ID=bridge
+export CLIENT_SECRET=secret
 ```
 
 You can optionally enable the debug output with:
@@ -79,11 +86,13 @@ applications:
     CONF: default
     DEBUG: abacus-cf*
     COLLECTOR: abacus-usage-collector
-    COUCHDB: abacus-dbserver
+    DB: abacus-pouchserver
     EUREKA: abacus-eureka-plugin
     UAA: https://uaa.bosh-lite.com:443
     API: https://api.bosh-lite.com:443
     NODE_MODULES_CACHE: false
+    CLIENT_ID: bridge
+    CLIENT_SECRET: secret
 ```
 
 Build, pack and push the bridge to Cloud Foundry:
@@ -101,5 +110,12 @@ cf start abacus-cf-bridge
 Tail the logs to check the progress:
 ```bash
 cf logs abacus-cf-bridge
+```
+
+You can change the client ID and secret used to communicate with CC like so:
+```
+cf set-env abacus-cf-bridge CLIENT_ID <client_id>
+cf set-env abacus-cf-bridge CLIENT_SECRET <secret>
+cf restart abacus-cf-bridge
 ```
 

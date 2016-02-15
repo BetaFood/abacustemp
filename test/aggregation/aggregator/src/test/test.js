@@ -12,6 +12,7 @@ const dbclient = require('abacus-dbclient');
 const seqid = require('abacus-seqid');
 const request = require('abacus-request');
 const clone = require('abacus-clone');
+const timewindow = require('abacus-timewindow');
 
 const BigNumber = require('bignumber.js');
 BigNumber.config({ ERRORS: false });
@@ -39,6 +40,10 @@ commander
   .option('-u, --usagedocs <n>', 'number of usage docs', parseInt)
   .option('-d, --day <d>',
     'usage time shift using number of days', parseInt)
+  .option('-t, --start-timeout <n>',
+    'external processes start timeout in milliseconds', parseInt)
+  .option('-x, --total-timeout <n>',
+    'test timeout in milliseconds', parseInt)
   .allowUnknownOption(true)
   .parse(argv);
 
@@ -53,6 +58,12 @@ const usage = commander.usagedocs || 1;
 
 // Usage time shift by number of days in milli-seconds
 const tshift = commander.day * 24 * 60 * 60 * 1000 || 0;
+
+// External Abacus processes start timeout
+const startTimeout = commander.startTimeout || 10000;
+
+// This test timeout
+const totalTimeout = commander.totalTimeout || 60000;
 
 // Module directory
 const moduleDir = (module) => {
@@ -77,55 +88,31 @@ const pruneWindows = (v, k) => {
   return v;
 };
 
-// Converts a millisecond number to a format a number that is YYYYMMDDHHmmSS
-const dateUTCNumbify = (t) => {
-  const d = new Date(t);
-  return d.getUTCFullYear() * 10000000000 + d.getUTCMonth() * 100000000
-    + d.getUTCDate() * 1000000 + d.getUTCHours() * 10000 + d.getUTCMinutes()
-    * 100 + d.getUTCSeconds();
-};
-
-// Converts a number output in dateUTCNumbify back to a Date object
-const revertUTCNumber = (n) => {
-  const numstring = n.toString();
-  const d = new Date(Date.UTC(
-    numstring.substring(0, 4),
-    numstring.substring(4, 6),
-    numstring.substring(6, 8),
-    numstring.substring(8, 10),
-    numstring.substring(10, 12),
-    numstring.substring(12)
-  ));
-  return d;
-};
-
 // Calculates the accumulated quantity given an end time, u, window size,
 // and multiplier factor of the usage
 const calculateQuantityByWindow = (e, u, w, m, f) => {
-  const time = e + u;
-  const timeNum = dateUTCNumbify(time);
-  const windowTimeNum = Math.floor(timeNum / w) * w;
+  const time = new Date(e + u);
 
   // Get the millisecond equivalent of the very start of the given window
-  const windowTime = revertUTCNumber(windowTimeNum).getTime();
-  return f(m, Math.min(time - windowTime, u));
+  return f(m, Math.min(time.getTime() -
+    timewindow.zeroLowerTimeDimensions(time, w).getTime(), u));
 };
 
-// Scaling factor for a time window
+// Dimensions for a time window
 // [Second, Minute, Hour, Day, Month]
-const timescale = [1, 100, 10000, 1000000, 100000000];
+const dimensions = ['s', 'm', 'h', 'D', 'M'];
 
 // Builds the quantity array in the accumulated usage
 const buildAccumulatedWindows = (e, u, m, f, price) => {
-  const windows = map(timescale, (ts) => {
+  const windows = map(dimensions, (d) => {
     // If this is the first usage, only return current
     if(u === 0)
       return [{ quantity: { current: f(m, u + 1) } }];
     // Return a properly accumulated current & previous
     return [{
       quantity: {
-        previous: calculateQuantityByWindow(e, u, ts, m, f),
-        current: calculateQuantityByWindow(e, u + 1, ts, m, f) } }];
+        previous: calculateQuantityByWindow(e, u, d, m, f),
+        current: calculateQuantityByWindow(e, u + 1, d, m, f) } }];
   });
   return map(windows, (w) => map(w, (q) => extend(q, {
     cost: new BigNumber(q.quantity.current).mul(price).toNumber() })));
@@ -133,15 +120,12 @@ const buildAccumulatedWindows = (e, u, m, f, price) => {
 
 // Builds the quantity array in the aggregated usage
 const buildAggregatedWindows = (p, u, ri, tri, count, end, f, price) => {
-  return map(timescale, (ts) => {
-    const time = end + u;
-    const timeNum = dateUTCNumbify(time);
-    const windowTimeNum = Math.floor(timeNum / ts) * ts;
+  return map(dimensions, (d) => {
+    const time = new Date(end + u);
+    const windowTime = timewindow.zeroLowerTimeDimensions(time, d);
 
-    // Get the millisecond equivalent of the very start of the given window
-    const windowTime = revertUTCNumber(windowTimeNum).getTime();
-
-    const q = f(p, Math.min(time - windowTime, u), ri, tri, count);
+    const q = f(p, Math.min(time.getTime() - windowTime.getTime(), u),
+      ri, tri, count);
     return price === undefined ? [{ quantity: q }] :
       [{ quantity: q,
         cost: new BigNumber(q).mul(price).toNumber() }];
@@ -162,8 +146,8 @@ describe('abacus-usage-aggregator-itest', () => {
     };
 
     // Start local database server
-    if (!process.env.COUCHDB)
-      start('abacus-dbserver');
+    if (!process.env.DB)
+      start('abacus-pouchserver');
 
     // Start account plugin
     start('abacus-account-plugin');
@@ -185,17 +169,17 @@ describe('abacus-usage-aggregator-itest', () => {
     stop('abacus-account-plugin');
 
     // Stop local database server
-    if (!process.env.COUCHDB)
-      stop('abacus-dbserver');
+    if (!process.env.DB)
+      stop('abacus-pouchserver');
   });
 
   it('aggregator accumulated usage submissions', function(done) {
-    // Configure the test timeout based on the number of usage docs, with
-    // a minimum of 60 secs
-    const timeout = Math.max(60000,
+    // Configure the test timeout based on the number of usage docs or
+    // predefined timeout
+    const timeout = Math.max(totalTimeout,
       100 * orgs * resourceInstances * usage);
     this.timeout(timeout + 2000);
-    const giveup = Date.now() + timeout;
+    const processingDeadline = Date.now() + timeout;
 
     // Initialize usage doc properties with unique values
     const start = Date.now() + tshift;
@@ -577,7 +561,7 @@ describe('abacus-usage-aggregator-itest', () => {
           catch (e) {
             // If the test cannot verify the actual data with the expected
             // data within the giveup time, forward the exception
-            if(Date.now() >= giveup) {
+            if(Date.now() >= processingDeadline) {
               debug('Unable to properly verify the last record');
               expect(clone(omit(val.rows[0].doc, ['id', 'processed',
                 '_id', '_rev', 'accumulated_usage_id', 'start']),
@@ -618,7 +602,7 @@ describe('abacus-usage-aggregator-itest', () => {
           catch (e) {
             // If the test cannot verify the actual data with the expected
             // data within the giveup time, forward the exception
-            if(Date.now() >= giveup) {
+            if(Date.now() >= processingDeadline) {
               debug('Unable to properly verify the last record');
               expect(clone(omit(val.rows[0].doc, ['id', 'processed',
                 '_id', '_rev', 'accumulated_usage_id', 'start']),
@@ -635,10 +619,8 @@ describe('abacus-usage-aggregator-itest', () => {
     };
 
     // Wait for usage aggregator to start
-    const procStartTimeout = process.env.CI_TIMEOUT ?
-      parseInt(process.env.CI_TIMEOUT) : 10000;
     request.waitFor('http://localhost::p/batch',
-      { p: 9300 }, procStartTimeout, (err, value) => {
+      { p: 9300 }, startTimeout, (err, value) => {
         // Failed to ping usage aggregator before timing out
         if (err) throw err;
 

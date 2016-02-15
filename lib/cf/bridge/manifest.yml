@@ -9,8 +9,10 @@ applications:
     CONF: default
     DEBUG: e-abacus-*
     COLLECTOR: abacus-usage-collector
-    COUCHDB: abacus-dbserver
+    DB: abacus-pouchserver
     EUREKA: abacus-eureka-plugin
     UAA: uaa
     API: api
+    CLIENT_ID: bridge
+    SECRET: secret
     NODE_MODULES_CACHE: false
